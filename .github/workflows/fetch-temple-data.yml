@@ -48,6 +48,7 @@ jobs:
           TEMPLES_BULK_BUDGET_CAP: "19800"
           TEMPLES_BULK_REGION_CAP: "3600"
           TEMPLES_BULK_REGION_SCALE: "5"
+          TEMPLES_BULK_SKIP_OVERPASS: "1"
         run: |
           ARGS="--out bulk-osm-out --no-install --budget-seconds $((BUDGET_MINUTES * 60))"
           if [ -n "$REGIONS" ]; then ARGS="$ARGS --regions $REGIONS"; fi

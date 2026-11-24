@@ -95,7 +95,7 @@ def query(code):
     return '[out:json][timeout:70][maxsize:134217728];area["ISO3166-1"="'+code+'"][admin_level=2]->.a;.a out count;('+''.join(selects)+');out center tags;'
 
 class Network:
-    def __init__(self, budget): self.budget=budget; self.rate_limits=0; self.overpass_disabled=False; self.last_request=0
+    def __init__(self, budget): self.budget=budget; self.rate_limits=0; self.overpass_disabled=os.environ.get('TEMPLES_BULK_SKIP_OVERPASS')=='1'; self.last_request=0
     def request(self, url, data=None, method=None, timeout=75):
         self.budget.require(2)
         return urllib.request.urlopen(urllib.request.Request(url, data=data, method=method,
