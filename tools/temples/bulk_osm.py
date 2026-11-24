@@ -393,7 +393,7 @@ def acquire(plan,out,budget,network,install=True,only=None):
                         meta=network.download(extract['url'],pbf,seconds)
                         child_budget=Budget(min(seconds-(time.monotonic()-region_started),budget.left()-5))
                         elements=filter_pbf(pbf,work,child_budget)
-                        files=write_parts(out,code+'-'+eid,elements,dict(meta,route='geofabrik',fetchedAt=now()))
+                        files=write_parts(out,code+'-'+eid.replace('/','-'),elements,dict(meta,route='geofabrik',fetchedAt=now()))
                         entry['extracts'][eid]={'status':'complete','files':files,'rows':len(elements)};save()
                 # Never infer completion from one subregion, or an empty list.
                 if not all(finished(entry['extracts'].get(e['id'],{}),out) for e in region['extracts']): raise ValueError('Incomplete extract route')
