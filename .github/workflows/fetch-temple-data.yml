@@ -1,0 +1,77 @@
+# Manual only. Runs in a PUBLIC repository, so it uses no paid or quota minutes.
+# It downloads public OpenStreetMap extracts, keeps Hindu temple facts, and saves
+# the result on a branch named out-<label>. No secrets. No app build. No signing.
+name: Fetch temple data
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: "Name for the output branch (out-<label>)"
+        required: true
+        default: "all"
+      regions:
+        description: "Comma-separated country codes; empty = all"
+        required: false
+        default: ""
+      budget_minutes:
+        description: "Working time limit in minutes"
+        required: true
+        default: "240"
+permissions:
+  contents: write
+concurrency:
+  group: fetch-${{ inputs.label }}
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore earlier output for this label (resume)
+        run: |
+          if git fetch --depth=1 origin "out-${{ inputs.label }}" 2>/dev/null; then
+            git archive FETCH_HEAD bulk-osm-out | tar -x || true
+          fi
+          ls bulk-osm-out 2>/dev/null | head || true
+      - name: Install map tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q osmium
+          echo "TEMPLES_OSMIUM_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+      - name: Fetch
+        env:
+          REGIONS: ${{ inputs.regions }}
+          BUDGET_MINUTES: ${{ inputs.budget_minutes }}
+          TEMPLES_BULK_BUDGET_CAP: "19800"
+          TEMPLES_BULK_REGION_CAP: "3600"
+          TEMPLES_BULK_REGION_SCALE: "5"
+        run: |
+          ARGS="--out bulk-osm-out --no-install --budget-seconds $((BUDGET_MINUTES * 60))"
+          if [ -n "$REGIONS" ]; then ARGS="$ARGS --regions $REGIONS"; fi
+          python3 tools/temples/bulk_osm.py $ARGS || echo "tool exit code $?"
+          du -sh bulk-osm-out || true
+          python3 - <<'PY'
+          import json, collections
+          m = json.load(open('bulk-osm-out/manifest.json'))
+          regions = m.get('regions', m)
+          rows = regions.values() if isinstance(regions, dict) else regions
+          print(collections.Counter(str(r.get('status')) for r in rows if isinstance(r, dict)))
+          PY
+      - name: Save output on branch out-<label>
+        if: always()
+        run: |
+          test -d bulk-osm-out || exit 0
+          find bulk-osm-out -type f -size +95M -print -delete
+          cp -r bulk-osm-out "$RUNNER_TEMP/out"
+          git config user.name "temple-data-job"
+          git config user.email "temple-data-job@users.noreply.github.com"
+          git checkout --orphan "tmp-out"
+          git rm -rf -q --cached . || true
+          git clean -fdxq
+          cp -r "$RUNNER_TEMP/out" bulk-osm-out
+          git add bulk-osm-out
+          git commit -q -m "Temple facts: ${{ inputs.label }} (OpenStreetMap contributors, ODbL)"
+          git push -f origin "HEAD:out-${{ inputs.label }}"
